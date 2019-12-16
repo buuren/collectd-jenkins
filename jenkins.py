@@ -510,15 +510,15 @@ def read_metrics(module_config):
             traverse_job_folders(jobs_data, module_config)
 
 
-def traverse_job_folders(jobs_data, module_config, job_name_suffix=''):
+def traverse_job_folders(jobs_data, module_config, job_name_suffix=""):
     """
     Recursively iterate Jenkins folders to find job build data
     """
     for job in jobs_data:
         if job["_class"] == "com.cloudbees.hudson.plugins.folder.Folder":
-            traverse_job_folders(job["jobs"], module_config, job_name_suffix=''.join([job_name_suffix, job['name'] + '/job/']))
+            traverse_job_folders(job["jobs"], module_config, job_name_suffix="".join([job_name_suffix, job["name"] + "/job/"]))
         else:
-            full_job_name = job_name_suffix + job["name"] + '/'
+            full_job_name = job_name_suffix + job["name"] + "/"
 
             if full_job_name in module_config["jobs_last_timestamp"]:
                 last_timestamp = module_config["jobs_last_timestamp"][full_job_name]
