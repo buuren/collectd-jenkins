@@ -89,7 +89,7 @@ def _api_call(url, type, auth_args, http_timeout):
     url = "{0}://{1}{2}".format(parsed_url.scheme, parsed_url.netloc, urllib_quote(parsed_url.path))
     resp = None
     try:
-        resp = requests.get(url, timeout=http_timeout, **auth_args)
+        resp = requests.get(url, params=parsed_url.query, timeout=http_timeout, **auth_args)
         resp.raise_for_status()
         return load_json(resp.text, url)
     except HTTPError as e:
@@ -340,7 +340,7 @@ def read_and_post_job_metrics(module_config, url, job_name, last_timestamp):
     """
     Reads json for a job and dispatches job related metrics
     """
-    job_url = url + "job/" + job_name + "/"
+    job_url = url + "job/" + job_name
     resp_obj = get_response(job_url, "jenkins", module_config)
     extra_dimensions = {}
     extra_dimensions["Job"] = job_name
@@ -453,7 +453,7 @@ def get_response(url, api_type, module_config):
     key = module_config["metrics_key"]
 
     if api_type == "jenkins":
-        extension = "api/json/"
+        extension = "api/json/?depth=1"
     elif api_type == "computer":
         extension = "computer/api/json/"
     else:
@@ -507,14 +507,26 @@ def read_metrics(module_config):
     if resp_obj is not None:
         if "jobs" in resp_obj and resp_obj["jobs"]:
             jobs_data = resp_obj["jobs"]
-            for job in jobs_data:
-                if job["name"] in module_config["jobs_last_timestamp"]:
-                    last_timestamp = module_config["jobs_last_timestamp"][job["name"]]
-                else:
-                    last_timestamp = int(time.time() * 1000) - (60 * 1000)
-                    module_config["jobs_last_timestamp"][job["name"]] = last_timestamp
-                read_and_post_job_metrics(module_config, module_config["base_url"], job["name"], last_timestamp)
+            traverse_job_folders(jobs_data, module_config)
 
+
+def traverse_job_folders(jobs_data, module_config, job_name_suffix=''):
+    """
+    Recursively iterate Jenkins folders to find job build data
+    """
+    for job in jobs_data:
+        if job["_class"] == "com.cloudbees.hudson.plugins.folder.Folder":
+            traverse_job_folders(job["jobs"], module_config, job_name_suffix=''.join([job_name_suffix, job['name'] + '/job/']))
+        else:
+            full_job_name = job_name_suffix + job["name"] + '/'
+
+            if full_job_name in module_config["jobs_last_timestamp"]:
+                last_timestamp = module_config["jobs_last_timestamp"][full_job_name]
+            else:
+                last_timestamp = int(time.time() * 1000) - (60 * 1000)
+                module_config["jobs_last_timestamp"][full_job_name] = last_timestamp
+
+            read_and_post_job_metrics(module_config, module_config["base_url"], full_job_name, last_timestamp)
 
 def init():
     """
