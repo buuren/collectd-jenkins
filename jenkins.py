@@ -340,7 +340,7 @@ def read_and_post_job_metrics(module_config, url, job_name, last_timestamp):
     """
     Reads json for a job and dispatches job related metrics
     """
-    job_url = url + "job/" + job_name
+    job_url = url + "job/" + job_name + "/"
     resp_obj = get_response(job_url, "jenkins", module_config)
     extra_dimensions = {}
     extra_dimensions["Job"] = job_name
