@@ -336,43 +336,49 @@ def prepare_and_dispatch_metric(module_config, name, value, _type, extra_dimensi
     data_point.dispatch()
 
 
-def read_and_post_job_metrics(module_config, url, job_name, last_timestamp):
+def read_and_post_job_metrics(module_config, url, job_name, job_data):
     """
     Reads json for a job and dispatches job related metrics
     """
+
+    if job_name in module_config["jobs_last_timestamp"]:
+        last_timestamp = module_config["jobs_last_timestamp"][job_name]
+    else:
+        last_timestamp = int(time.time() * 1000) - (60 * 1000)
+        module_config["jobs_last_timestamp"][job_name] = last_timestamp
+
+    collectd.debug("Job name [{}] last timestamp [{}]".format(job_name, last_timestamp))
+
     job_url = url + "job/" + job_name + "/"
-    resp_obj = get_response(job_url, "jenkins", module_config)
+    # resp_obj = get_response(job_url, "jenkins", module_config)
     extra_dimensions = {}
     extra_dimensions["Job"] = job_name
-    if isinstance(resp_obj, dict) and resp_obj.get("builds", None) is not None:
-        builds = resp_obj["builds"]
-        for i in range(len(builds)):
-            build_url = job_url + str(builds[i]["number"]) + "/"
-            resp = get_response(build_url, "jenkins", module_config)
+    if isinstance(job_data, dict) and job_data.get("builds", None) is not None:
+        # builds = job_data["builds"]
+        # get_job_data_resp = get_response(job_url, "jenkins", module_config)
 
-            # Dispatch metrics only if build has completed
-            if resp and not resp["building"]:
-                build_timestamp = resp["timestamp"] + resp["duration"]
+        for build in job_data['builds']:
+            build_timestamp = build["timestamp"] + build["duration"]
 
+            if not build["building"] and build_timestamp > last_timestamp:
                 # Dispatch metrics only if the timestamp is greater than that of
                 # last metric sent else break as everything before it is already sent
-                if build_timestamp > last_timestamp:
-                    if module_config["jobs_last_timestamp"][job_name] < build_timestamp:
-                        module_config["jobs_last_timestamp"][job_name] = build_timestamp
+                if module_config["jobs_last_timestamp"][job_name] < build_timestamp:
+                    module_config["jobs_last_timestamp"][job_name] = build_timestamp
 
-                    extra_dimensions["Result"] = resp["result"]
+                extra_dimensions["Result"] = build["result"]
 
-                    for key in JOB_METRICS:
-                        if key in resp:
-                            prepare_and_dispatch_metric(
-                                module_config, JOB_METRICS[key].name, resp[key], JOB_METRICS[key].type, extra_dimensions
-                            )
-                        else:
-                            prepare_and_dispatch_metric(
-                                module_config, JOB_METRICS[key].name, 0, JOB_METRICS[key].type, extra_dimensions
-                            )
-                else:
-                    break
+                for key in JOB_METRICS:
+                    if key in build:
+                        prepare_and_dispatch_metric(
+                            module_config, JOB_METRICS[key].name, build[key], JOB_METRICS[key].type, extra_dimensions
+                        )
+                    else:
+                        prepare_and_dispatch_metric(
+                            module_config, JOB_METRICS[key].name, 0, JOB_METRICS[key].type, extra_dimensions
+                        )
+            else:
+                break
 
 
 def parse_and_post_metrics(module_config, resp):
@@ -453,7 +459,7 @@ def get_response(url, api_type, module_config):
     key = module_config["metrics_key"]
 
     if api_type == "jenkins":
-        extension = "api/json/?depth=1"
+        extension = "api/json/?depth=3"
     elif api_type == "computer":
         extension = "computer/api/json/"
     else:
@@ -505,7 +511,7 @@ def read_metrics(module_config):
     resp_obj = get_response(module_config["base_url"], "jenkins", module_config)
 
     if resp_obj is not None:
-        if "jobs" in resp_obj and resp_obj["jobs"]:
+        if contains_jobs(resp_obj):
             jobs_data = resp_obj["jobs"]
             traverse_job_folders(jobs_data, module_config)
 
@@ -515,18 +521,33 @@ def traverse_job_folders(jobs_data, module_config, job_name_suffix=""):
     Recursively iterate Jenkins folders to find job build data
     """
     for job in jobs_data:
-        if job["_class"] == "com.cloudbees.hudson.plugins.folder.Folder":
-            traverse_job_folders(job["jobs"], module_config, job_name_suffix="".join([job_name_suffix, job["name"] + "/job/"]))
+        if is_folder(job) and contains_jobs(job):
+            current_folder_name = job["name"]
+            for nested_job in job["jobs"]:
+                if is_folder(nested_job) and contains_jobs(nested_job):
+                    traverse_job_folders(nested_job["jobs"], module_config, "".join([job_name_suffix, current_folder_name + "/job/"]))
+                else:
+                    read_and_post_job_metrics(
+                        module_config,
+                        module_config["base_url"],
+                        job_name_suffix + current_folder_name + "/job/" + nested_job["name"],
+                        nested_job
+                    )
         else:
-            full_job_name = job_name_suffix + job["name"] + "/"
+            read_and_post_job_metrics(
+                module_config,
+                module_config["base_url"],
+                job_name_suffix + job["name"],
+                job
+            )
 
-            if full_job_name in module_config["jobs_last_timestamp"]:
-                last_timestamp = module_config["jobs_last_timestamp"][full_job_name]
-            else:
-                last_timestamp = int(time.time() * 1000) - (60 * 1000)
-                module_config["jobs_last_timestamp"][full_job_name] = last_timestamp
+def contains_jobs(obj):
+    return True if "jobs" in obj and obj["jobs"] else False
 
-            read_and_post_job_metrics(module_config, module_config["base_url"], full_job_name, last_timestamp)
+
+def is_folder(obj):
+    return True if obj["_class"] == "com.cloudbees.hudson.plugins.folder.Folder" else False
+
 
 def init():
     """
