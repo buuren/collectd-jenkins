@@ -5,7 +5,7 @@ import collections
 import json
 import pprint
 import time
-import six
+
 import requests
 import urllib3
 from requests import HTTPError, RequestException
@@ -13,19 +13,7 @@ from requests.auth import HTTPBasicAuth
 from six.moves import urllib
 from six.moves.urllib.parse import quote as urllib_quote
 
-# import collectd
-
-class Logs:
-    def error(self, messsage):
-        print(messsage)
-    def info(self, messsage):
-        print(messsage)
-        print(messsage)
-    def debug(self, messsage):
-        print(messsage)
-
-
-collectd = Logs()
+import collectd
 
 # Prevents spamming when not validating certificates.
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -162,27 +150,24 @@ def get_auth_args(module_config):
     return args
 
 
-def read_config():
+def read_config(conf):
     """
     Reads the configurations provided by the user
     """
     module_config = {
         "member_id": None,
-        "plugin_config": {
-            "Host": "jenkins.eng-dev.mb-internal.com",
-            "Port": 443,
-        },
+        "plugin_config": {},
         "username": None,
         "api_token": None,
         "opener": None,
-        "metrics_key": "elb",
+        "metrics_key": None,
         "custom_dimensions": {},
-        "enhanced_metrics": True,
+        "enhanced_metrics": False,
         "include_optional_metrics": set(),
         "exclude_optional_metrics": set(),
         "http_timeout": DEFAULT_API_TIMEOUT,
         "jobs_last_timestamp": {},
-        "ssl_keys": {"enabled": True, "ssl_cert_validation": True},
+        "ssl_keys": {"enabled": False, "ssl_cert_validation": True},
     }
 
     interval = None
@@ -191,43 +176,43 @@ def read_config():
     required_keys = ("Host", "Port")
     auth_keys = ("Username", "APIToken", "MetricsKey")
 
-    # for val in conf.children:
-    #     if val.key in required_keys:
-    #         module_config["plugin_config"][val.key] = val.values[0]
-    #     elif val.key == "Interval" and val.values[0]:
-    #         interval = val.values[0]
-    #     elif val.key in auth_keys and val.key == "Username" and val.values[0]:
-    #         module_config["username"] = val.values[0]
-    #     elif val.key in auth_keys and val.key == "APIToken" and val.values[0]:
-    #         module_config["api_token"] = val.values[0]
-    #     elif val.key in auth_keys and val.key == "MetricsKey" and val.values[0]:
-    #         module_config["metrics_key"] = val.values[0]
-    #     elif val.key == "Dimension":
-    #         if len(val.values) == 2:
-    #             module_config["custom_dimensions"].update({val.values[0]: val.values[1]})
-    #         else:
-    #             collectd.warning("WARNING: Dimension Key Value format required")
-    #     elif val.key == "EnhancedMetrics" and val.values[0]:
-    #         module_config["enhanced_metrics"] = str_to_bool(val.values[0])
-    #     elif val.key == "IncludeMetric" and val.values[0] and val.values[0] not in NODE_METRICS:
-    #         module_config["include_optional_metrics"].add(val.values[0])
-    #     elif val.key == "ExcludeMetric" and val.values[0] and val.values[0] not in NODE_METRICS:
-    #         module_config["exclude_optional_metrics"].add(val.values[0])
-    #     elif val.key == "ssl_enabled" and val.values[0]:
-    #         module_config["ssl_keys"]["enabled"] = str_to_bool(val.values[0])
-    #     elif val.key == "ssl_keyfile" and val.values[0]:
-    #         module_config["ssl_keys"]["ssl_keyfile"] = val.values[0]
-    #     elif val.key == "ssl_certificate" and val.values[0]:
-    #         module_config["ssl_keys"]["ssl_certificate"] = val.values[0]
-    #     elif val.key == "ssl_ca_certs" and val.values[0]:
-    #         module_config["ssl_keys"]["ssl_ca_certs"] = val.values[0]
-    #     elif val.key == "ssl_cert_validation" and val.values[0]:
-    #         # Doesn't use str_to_bool because the function defaults to
-    #         # false and we want to default to true.
-    #         if val.values[0].strip().lower() == "false":
-    #             module_config["ssl_keys"]["ssl_cert_validation"] = False
-    #     elif val.key == "Testing" and str_to_bool(val.values[0]):
-    #         testing = True
+    for val in conf.children:
+        if val.key in required_keys:
+            module_config["plugin_config"][val.key] = val.values[0]
+        elif val.key == "Interval" and val.values[0]:
+            interval = val.values[0]
+        elif val.key in auth_keys and val.key == "Username" and val.values[0]:
+            module_config["username"] = val.values[0]
+        elif val.key in auth_keys and val.key == "APIToken" and val.values[0]:
+            module_config["api_token"] = val.values[0]
+        elif val.key in auth_keys and val.key == "MetricsKey" and val.values[0]:
+            module_config["metrics_key"] = val.values[0]
+        elif val.key == "Dimension":
+            if len(val.values) == 2:
+                module_config["custom_dimensions"].update({val.values[0]: val.values[1]})
+            else:
+                collectd.warning("WARNING: Dimension Key Value format required")
+        elif val.key == "EnhancedMetrics" and val.values[0]:
+            module_config["enhanced_metrics"] = str_to_bool(val.values[0])
+        elif val.key == "IncludeMetric" and val.values[0] and val.values[0] not in NODE_METRICS:
+            module_config["include_optional_metrics"].add(val.values[0])
+        elif val.key == "ExcludeMetric" and val.values[0] and val.values[0] not in NODE_METRICS:
+            module_config["exclude_optional_metrics"].add(val.values[0])
+        elif val.key == "ssl_enabled" and val.values[0]:
+            module_config["ssl_keys"]["enabled"] = str_to_bool(val.values[0])
+        elif val.key == "ssl_keyfile" and val.values[0]:
+            module_config["ssl_keys"]["ssl_keyfile"] = val.values[0]
+        elif val.key == "ssl_certificate" and val.values[0]:
+            module_config["ssl_keys"]["ssl_certificate"] = val.values[0]
+        elif val.key == "ssl_ca_certs" and val.values[0]:
+            module_config["ssl_keys"]["ssl_ca_certs"] = val.values[0]
+        elif val.key == "ssl_cert_validation" and val.values[0]:
+            # Doesn't use str_to_bool because the function defaults to
+            # false and we want to default to true.
+            if val.values[0].strip().lower() == "false":
+                module_config["ssl_keys"]["ssl_cert_validation"] = False
+        elif val.key == "Testing" and str_to_bool(val.values[0]):
+            testing = True
 
     # Make sure all required config settings are present, and log them
     collectd.info("Using config settings:")
@@ -267,11 +252,10 @@ def read_config():
         # for testing purposes
         return module_config
 
-    read_metrics(module_config)
-    # if interval is not None:
-    #     collectd.register_read(read_metrics, interval, data=module_config, name=module_config["member_id"])
-    # else:
-    #     collectd.register_read(read_metrics, data=module_config, name=module_config["member_id"])
+    if interval is not None:
+        collectd.register_read(read_metrics, interval, data=module_config, name=module_config["member_id"])
+    else:
+        collectd.register_read(read_metrics, data=module_config, name=module_config["member_id"])
 
 
 def str_to_bool(flag):
@@ -324,32 +308,32 @@ def prepare_and_dispatch_metric(module_config, name, value, _type, extra_dimensi
     """
     Prepares and dispatches a metric
     """
-    # data_point = collectd.Values(plugin=PLUGIN_NAME)
-    # data_point.type_instance = name
-    # data_point.type = _type
-    #
-    # data_point.plugin_instance = prepare_plugin_instance(
-    #     module_config["member_id"], module_config["custom_dimensions"], extra_dimensions
-    # )
-    #
-    # data_point.values = [value]
-    #
-    # # With some versions of CollectD, a dummy metadata map must to be added
-    # # to each value for it to be correctly serialized to JSON by the
-    # # write_http plugin. See
-    # # https://github.com/collectd/collectd/issues/716
-    # data_point.meta = {"0": True}
-    #
-    # pprint_dict = {
-    #     "plugin": data_point.plugin,
-    #     "plugin_instance": data_point.plugin_instance,
-    #     "type": data_point.type,
-    #     "type_instance": data_point.type_instance,
-    #     "values": data_point.values,
-    # }
-    # collectd.debug(pprint.pformat(pprint_dict))
-    #
-    # data_point.dispatch()
+    data_point = collectd.Values(plugin=PLUGIN_NAME)
+    data_point.type_instance = name
+    data_point.type = _type
+
+    data_point.plugin_instance = prepare_plugin_instance(
+        module_config["member_id"], module_config["custom_dimensions"], extra_dimensions
+    )
+
+    data_point.values = [value]
+
+    # With some versions of CollectD, a dummy metadata map must to be added
+    # to each value for it to be correctly serialized to JSON by the
+    # write_http plugin. See
+    # https://github.com/collectd/collectd/issues/716
+    data_point.meta = {"0": True}
+
+    pprint_dict = {
+        "plugin": data_point.plugin,
+        "plugin_instance": data_point.plugin_instance,
+        "type": data_point.type,
+        "type_instance": data_point.type_instance,
+        "values": data_point.values,
+    }
+    collectd.debug(pprint.pformat(pprint_dict))
+
+    data_point.dispatch()
 
 
 def read_and_post_job_metrics(module_config, url, job_name, job_data):
@@ -366,13 +350,9 @@ def read_and_post_job_metrics(module_config, url, job_name, job_data):
     collectd.debug("Job name [{}] last timestamp [{}]".format(job_name, last_timestamp))
 
     job_url = url + "job/" + job_name + "/"
-    # resp_obj = get_response(job_url, "jenkins", module_config)
     extra_dimensions = {}
     extra_dimensions["Job"] = job_name
     if isinstance(job_data, dict) and job_data.get("builds", None) is not None:
-        # builds = job_data["builds"]
-        # get_job_data_resp = get_response(job_url, "jenkins", module_config)
-
         for build in job_data['builds']:
             build_timestamp = build["timestamp"] + build["duration"]
 
@@ -395,6 +375,7 @@ def read_and_post_job_metrics(module_config, url, job_name, job_data):
                         )
             else:
                 break
+
 
 def parse_and_post_metrics(module_config, resp):
     """
@@ -476,14 +457,10 @@ def get_response(url, api_type, module_config):
     Prepare endpoint URL and get response
     """
 
-    # get_response(module_config["base_url"], "jenkins", module_config)
-
     extension = None
     resp_obj = None
 
     key = module_config["metrics_key"]
-
-    print(module_config)
 
     if api_type == "jenkins":
         extension = "api/json/?depth=3"
@@ -513,35 +490,34 @@ def read_metrics(module_config):
     """
     collectd.debug("Executing read_metrics callback")
 
-    # alive = get_response(module_config["base_url"], "ping", module_config)
-    #
-    # if alive is not None:
-    #     prepare_and_dispatch_metric(
-    #         module_config, NODE_STATUS_METRICS["ping"].name, alive, NODE_STATUS_METRICS["ping"].type
-    #     )
-    #
-    # resp_obj = get_response(module_config["base_url"], "computer", module_config)
-    #
-    # if resp_obj is not None:
-    #     report_slave_status(module_config, resp_obj["computer"])
-    #
+    alive = get_response(module_config["base_url"], "ping", module_config)
+
+    if alive is not None:
+        prepare_and_dispatch_metric(
+            module_config, NODE_STATUS_METRICS["ping"].name, alive, NODE_STATUS_METRICS["ping"].type
+        )
+
+    resp_obj = get_response(module_config["base_url"], "computer", module_config)
+
+    if resp_obj is not None:
+        report_slave_status(module_config, resp_obj["computer"])
+
     resp_obj = get_response(module_config["base_url"], "metrics", module_config)
 
     if resp_obj is not None:
         parse_and_post_metrics(module_config, resp_obj["gauges"])
 
-    # resp_obj = get_response(module_config["base_url"], "healthcheck", module_config)
-    #
-    # if resp_obj is not None:
-    #     parse_and_post_healthcheck(module_config, resp_obj)
-    #
-    # resp_obj = get_response(module_config["base_url"], "jenkins", module_config)
-    #
-    # if resp_obj is not None:
-    #     if "jobs" in resp_obj and resp_obj["jobs"]:
-    #         jobs_data = resp_obj["jobs"]
-    #         traverse_job_folders(jobs_data, module_config)
+    resp_obj = get_response(module_config["base_url"], "healthcheck", module_config)
 
+    if resp_obj is not None:
+        parse_and_post_healthcheck(module_config, resp_obj)
+
+    resp_obj = get_response(module_config["base_url"], "jenkins", module_config)
+
+    if resp_obj is not None:
+        if contains_jobs(resp_obj):
+            jobs_data = resp_obj["jobs"]
+            traverse_job_folders(jobs_data, module_config)
 
 
 def traverse_job_folders(jobs_data, module_config, job_name_suffix=""):
@@ -553,20 +529,24 @@ def traverse_job_folders(jobs_data, module_config, job_name_suffix=""):
             current_folder_name = job["name"]
             for nested_job in job["jobs"]:
                 if is_folder(nested_job) and contains_jobs(nested_job):
-                    traverse_job_folders(nested_job["jobs"], module_config, "".join([job_name_suffix, current_folder_name + "/job/"]))
+                    traverse_job_folders(
+                        jobs_data=nested_job["jobs"],
+                        module_config=module_config,
+                        job_name_suffix="".join([job_name_suffix, current_folder_name + "/job/"])
+                    )
                 else:
                     read_and_post_job_metrics(
-                        module_config,
-                        module_config["base_url"],
-                        job_name_suffix + current_folder_name + "/job/" + nested_job["name"],
-                        nested_job
+                        module_config=module_config,
+                        url=module_config["base_url"],
+                        job_name=job_name_suffix + current_folder_name + "/job/" + nested_job["name"],
+                        job_data=nested_job
                     )
         else:
             read_and_post_job_metrics(
-                module_config,
-                module_config["base_url"],
-                job_name_suffix + job["name"],
-                job
+                module_config=module_config,
+                url=module_config["base_url"],
+                job_name=job_name_suffix + job["name"],
+                job_data=job
             )
 
 
@@ -596,14 +576,9 @@ def setup_collectd():
     """
     Registers callback functions with collectd
     """
-    # collectd.register_init(init)
-    # collectd.register_config(read_config)
-    # collectd.register_shutdown(shutdown)
-    read_config()
+    collectd.register_init(init)
+    collectd.register_config(read_config)
+    collectd.register_shutdown(shutdown)
 
 
 setup_collectd()
-
-if __name__ == '__main__':
-    print("test")
-
